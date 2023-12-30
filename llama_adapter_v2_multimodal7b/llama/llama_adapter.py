@@ -65,7 +65,8 @@ class LLaMA_adapter(nn.Module):
         model_args.lora_rank = lora_rank
         model_args.w_new_gate = w_new_gate
         model_args.vocab_size = self.tokenizer.n_words
-        torch.set_default_tensor_type(torch.cuda.HalfTensor)
+        #torch.set_default_tensor_type(torch.cuda.HalfTensor)
+        torch.set_default_tensor_type(torch.FloatTensor)
         self.llama = Transformer(model_args)
         torch.set_default_tensor_type(torch.FloatTensor)
 
@@ -222,7 +223,8 @@ class LLaMA_adapter(nn.Module):
         assert bsz <= params.max_batch_size, (bsz, params.max_batch_size)
         assert len(imgs) == len(prompts)
 
-        with torch.cuda.amp.autocast():
+        #with torch.cuda.amp.autocast():
+        with torch.cpu.amp.autocast():
             visual_query = self.forward_visual(imgs)
 
         if isinstance(prompts[0], str):
@@ -233,15 +235,18 @@ class LLaMA_adapter(nn.Module):
 
         total_len = min(params.max_seq_len, max_gen_len + max_prompt_size)
 
-        tokens = torch.full((bsz, total_len), self.tokenizer.pad_id).cuda().long()
+        #tokens = torch.full((bsz, total_len), self.tokenizer.pad_id).cuda().long()
+        tokens = torch.full((bsz, total_len), self.tokenizer.pad_id).long()
 
         for k, t in enumerate(prompts):
-            tokens[k, : len(t)] = torch.tensor(t).cuda().long()
+            #tokens[k, : len(t)] = torch.tensor(t).cuda().long()
+            tokens[k, : len(t)] = torch.tensor(t).long()
         input_text_mask = tokens != self.tokenizer.pad_id
         start_pos = min_prompt_size
         prev_pos = 0
         for cur_pos in range(start_pos, total_len):
-            with torch.cuda.amp.autocast():
+            #with torch.cuda.amp.autocast():
+            with torch.cpu.amp.autocast():
                 logits = self.forward_inference(visual_query, tokens[:, prev_pos:cur_pos], prev_pos)
             if temperature > 0:
                 probs = torch.softmax(logits / temperature, dim=-1)
@@ -287,7 +292,8 @@ _MODELS = {
 def available_models():
     return list(_MODELS.keys())
 
-def load(name, llama_dir, llama_type="7B", device="cuda" if torch.cuda.is_available() else "cpu", download_root='ckpts', max_seq_len=512,
+#def load(name, llama_dir, llama_type="7B", device="cuda" if torch.cuda.is_available() else "cpu", download_root='ckpts', max_seq_len=512,
+def load(name, llama_dir, llama_type="7B", device="cpu", download_root='ckpts', max_seq_len=512,
         phase="finetune"):
     if name in _MODELS:
         model_path = _download(_MODELS[name], download_root)
